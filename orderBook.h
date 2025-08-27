@@ -6,10 +6,11 @@
 
 #ifndef BUY_SIDE
 #define BUY_SIDE true
+#define SELL_SIDE false
 #endif
 
 struct Order {
-    uint32_t id; 
+    unsigned long long id; 
     bool side; 
     uint32_t volume; 
     uint8_t price; 
