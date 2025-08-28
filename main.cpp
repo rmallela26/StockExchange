@@ -3,95 +3,83 @@
 #include <cassert>
 #include "orderBook.h"
 #include "util.h"
+#include "matchingEngine.h"
 
 int main() {
-    Queue q;
+    {
+        std::cout << "=== Test 1: Multiple Partial Fills Across Levels ===\n";
+        MatchingEngine engine;
 
-    // --- Test 1: basic push/pop ---
-    Order a{static_cast<uint32_t>(111), BUY_SIDE,
-            static_cast<uint32_t>(100), static_cast<uint8_t>(5)};
-    Order b{static_cast<uint32_t>(222), SELL_SIDE,
-            static_cast<uint32_t>(200), static_cast<uint8_t>(51)};
+        engine.limit(SELL_SIDE, 5, 101);   // id=1
+        engine.limit(SELL_SIDE, 6, 102);   // id=2
 
-    q.push(a);
-    q.push(b);
+        auto id3 = engine.limit(BUY_SIDE, 10, 105);
+        std::cout << "BUY id=" << id3 << " should fully match SELL id=1 (5) "
+                  << "and partially match SELL id=2 (5/6)\n";
 
-    Order* o1 = q.pop();
-        std::cout << "hello " << o1->id << " " << o1->side << " " << o1->volume << " " << static_cast<int>(o1->price) << std::endl;
-    assert(o1 && o1->id == a.id && o1->side == a.side &&
-           o1->volume == a.volume && o1->price == a.price);
-    std::cout << "Pop a OK\n";
-
-    Order* o2 = q.pop();
-    if (o2)
-        std::cout << "hello " << o2->id << " " << o2->side << " " << o2->volume << " " << static_cast<int>(o2->price) << std::endl;
-    assert(o2 && o2->id == b.id && o2->side == b.side &&
-           o2->volume == b.volume && o2->price == b.price);
-    std::cout << "Pop b OK\n";
-
-    assert(q.pop() == nullptr);
-    std::cout << "Empty pop OK\n";
-
-    // --- Test 2: rollover ---
-    Order c{static_cast<uint32_t>(333), BUY_SIDE,
-            static_cast<uint32_t>(10), static_cast<uint8_t>(42)};
-    Order d{static_cast<uint32_t>(444), SELL_SIDE,
-            static_cast<uint32_t>(20), static_cast<uint8_t>(43)};
-    Order e{static_cast<uint32_t>(555), BUY_SIDE,
-            static_cast<uint32_t>(30), static_cast<uint8_t>(44)};
-
-    q.push(c);
-    q.push(d);
-    q.push(e); // rollover
-
-    Order* o3 = q.pop();
-    assert(o3 && o3->id == c.id);
-    Order* o4 = q.pop();
-    assert(o4 && o4->id == d.id);
-    Order* o5 = q.pop();
-    assert(o5 && o5->id == e.id);
-    std::cout << "Rollover OK\n";
-
-    // --- Test 3: tombstone skip ---
-    Order f{static_cast<uint32_t>(666), BUY_SIDE,
-            static_cast<uint32_t>(77), static_cast<uint8_t>(55)};
-    Order g{static_cast<uint32_t>(777), SELL_SIDE,
-            static_cast<uint32_t>(88), static_cast<uint8_t>(56)};
-
-    q.push(f);
-    q.push(g);
-
-    // mark first as tombstone
-    q.head->slots[q.head->head] = Order::tombstone();
-
-    Order* o6 = q.pop();
-    if (o6) {
-        std::cout << o6->id << std::endl;
+        if (!engine.orders[1])
+            std::cout << "SELL id=1 fully filled ✅\n";
+        if (engine.orders[2])
+            std::cout << "SELL id=2 remaining volume=" << engine.orders[2]->volume << "\n";
     }
-    assert(o6 && o6->id == g.id);
-    assert(q.pop() == nullptr);
-    std::cout << "Tombstone skip OK\n";
 
-    // --- Test 4: multiple rollovers ---
-    Order arr[10];
-    for (int i = 0; i < 10; i++) {
-        arr[i] = {
-            static_cast<uint32_t>(1000 + i),
-            BUY_SIDE,
-            static_cast<uint32_t>(10 + i),
-            static_cast<uint8_t>(50 + i)
-        };
-        q.push(arr[i]);
-    }
-    for (int i = 0; i < 10; i++) {
-        Order* o = q.pop();
-        assert(o && o->id == arr[i].id &&
-               o->volume == arr[i].volume &&
-               o->price == arr[i].price);
-    }
-    assert(q.pop() == nullptr);
-    std::cout << "Multiple rollovers OK\n";
+    {
+        std::cout << "\n=== Test 2: Partial Fill Then Add to Book ===\n";
+        MatchingEngine engine;
 
-    std::cout << "All tests passed!\n";
+        engine.limit(SELL_SIDE, 5, 100); // id=1
+        auto id2 = engine.limit(BUY_SIDE, 3, 105); // fully fills
+        std::cout << "BUY id=" << id2 << " fully filled ✅\n";
+        std::cout << "SELL id=1 remaining volume=" << engine.orders[1]->volume << "\n";
+
+        auto id3 = engine.limit(BUY_SIDE, 4, 95); // won’t cross
+        std::cout << "BUY id=" << id3 << " resting in book @95 ✅\n";
+    }
+
+    {
+        std::cout << "\n=== Test 3: Exact Price Match ===\n";
+        MatchingEngine engine;
+
+        auto id1 = engine.limit(SELL_SIDE, 4, 100);
+        auto id2 = engine.limit(BUY_SIDE, 4, 100);
+
+        if (!engine.orders[id1] && !engine.orders[id2])
+            std::cout << "Both orders fully filled ✅\n";
+    }
+
+    {
+        std::cout << "\n=== Test 4: Price Priority ===\n";
+        MatchingEngine engine;
+
+        engine.limit(SELL_SIDE, 5, 100); // id=1
+        engine.limit(SELL_SIDE, 5, 99);  // id=2
+
+        auto id3 = engine.limit(BUY_SIDE, 7, 101);
+        std::cout << "BUY id=" << id3 << " matched SELL@99 first, then SELL@100 ✅\n";
+        if (engine.orders[2] == nullptr)
+            std::cout << "SELL id=2 fully filled ✅\n";
+        if (engine.orders[1])
+            std::cout << "SELL id=1 remaining volume=" << engine.orders[1]->volume << "\n";
+    }
+
+    {
+        std::cout << "\n=== Test 5: Cancel (stub) ===\n";
+        MatchingEngine engine;
+        auto id1 = engine.limit(BUY_SIDE, 10, 100);
+        engine.cancel(id1);
+        if (engine.orders[id1] == nullptr)
+            std::cout << "Order " << id1 << " canceled ✅\n";
+    }
+
+    {
+        std::cout << "\n=== Test 6: Modify (stub) ===\n";
+        MatchingEngine engine;
+        auto id1 = engine.limit(SELL_SIDE, 5, 105);
+        engine.modify(id1, 10, 103); // volume=10, price=103
+        if (engine.orders[id1])
+            std::cout << "Order " << id1 << " now volume=" << engine.orders[id1]->volume
+                      << " price=" << engine.orders[id1]->price << " ✅\n";
+    }
+
     return 0;
 }

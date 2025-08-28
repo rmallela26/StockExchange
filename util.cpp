@@ -10,7 +10,7 @@
 #include "util.h"
 
 SlabAllocator::SlabAllocator(std::size_t bytes, size_t slab) :
-    slabSize(slab),  totalSize(bytes) {
+    totalSize(bytes), slabSize(slab) {
     region = mmap(nullptr, bytes,
                     PROT_READ | PROT_WRITE,
                     MAP_PRIVATE | MAP_ANONYMOUS,
@@ -39,12 +39,14 @@ SlabAllocator queueSlabAllocator(128 * 1000000ULL, sizeof(Chunk));  // 128 MB
 
 
 
-Queue::Queue() {
+Queue::Queue(uint32_t pl) {
     head = new (queueSlabAllocator.getSlab()) Chunk();
     tail = head;
+    priceLevel = pl;
 }
 
-void Queue::push(Order order) {
+// returns the address where the element was pushed
+Order* Queue::push(Order order) {
     int h = tail->head;
     int t = tail->tail;
 
@@ -56,9 +58,11 @@ void Queue::push(Order order) {
         tail = tail->next;
         tail->slots[0] = order;
         tail->tail = 1;
+        return &tail->slots[0];
     } else {
         tail->slots[t] = order;
         tail->tail = next;
+        return &tail->slots[t];
     }
 }
 
@@ -93,4 +97,34 @@ Order* Queue::pop() {
     h = (h + 1) % CHUNK_SIZE;
     head->head = h;
     return order;
+}
+
+Order* Queue::peek() {
+    int h = head->head;
+    int t = head->tail; 
+    
+    if (h == t) {
+        if (head->next) {
+            head = head->next;
+            h = head->head;
+            t = head->tail;
+        } else {
+            return NULL;
+        }
+    }
+    Order* o = head->slots;
+    while (o[h].isTombStone()) {
+        h = (h + 1) % CHUNK_SIZE;
+        if (h == t) {
+            if (head->next) {
+                head = head->next;
+                h = head->head;
+                t = head->tail;
+                o = head->slots;
+            } else {
+                return NULL;
+            }
+        } 
+    }
+    return &o[h];
 }

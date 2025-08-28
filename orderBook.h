@@ -4,22 +4,24 @@
 #include <stdexcept>
 #pragma once
 
-#ifndef BUY_SIDE
+#ifndef ORDER_BOOK_H
+#define ORDER_BOOK_H
+
 #define BUY_SIDE true
 #define SELL_SIDE false
-#endif
 
 struct Order {
     unsigned long long id; 
     bool side; 
     uint32_t volume; 
-    uint8_t price; 
+    uint32_t price; 
 
     bool isTombStone() const noexcept {
         return id == 0;
     }
 
-    static Order tombstone() noexcept {
-        return Order{0, BUY_SIDE, 0, 0};
+    void tombstone() noexcept {
+        id = 0;
     }
 };
+#endif

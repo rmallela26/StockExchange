@@ -1,10 +1,17 @@
 #include <vector>
 #include "util.h"
 
+#ifndef MATCHING_ENGINE_H
+#define MATCHING_ENGINE_H
+
+const unsigned long long MAX_ORDERS = 1'000'000; // maximum number of add orders per shard 
+const unsigned long long MAX_PRICE_LEVELS = 10'000;
+
 class MatchingEngine {
-    std::vector<Order*> orders{10000};
-    long long id = 1;
-    std::vector<Queue> priceLevels{100};
+    // std::vector<Order*> orders;
+    // long long id = 1;
+    // std::vector<Queue> buySide;
+    // std::vector<Queue> sellSide;
 
 public:
     /*
@@ -14,8 +21,16 @@ public:
     Modify order - id, price, volume (assume side is the same) 
     */
 
-    unsigned long long limit(bool side, uint32_t volume, uint8_t price);
-    unsigned long long market(bool side, uint32_t volume, uint8_t price);
+    std::vector<Order*> orders;
+    unsigned long long id = 1;
+    std::vector<Queue> buySide;
+    std::vector<Queue> sellSide;
+
+    MatchingEngine();
+
+    unsigned long long limit(bool side, uint32_t volume, uint32_t price);
+    unsigned long long market(bool side, uint32_t volume, uint32_t price);
     void cancel(unsigned long long id);
-    void modify(unsigned long long id, uint32_t newVolume, uint8_t newPrice);
+    void modify(unsigned long long id, uint32_t newVolume, uint32_t  newPrice);
 };
+#endif

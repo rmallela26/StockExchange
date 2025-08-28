@@ -6,9 +6,10 @@
 #include <stdexcept>
 #include <cmath>
 
-#ifndef CHUNK_SIZE
+#ifndef UTIL_H
+#define UTIL_H
+
 #define CHUNK_SIZE 2
-#endif
 
 struct Chunk {
     int head = 0; // if head == tail, then it's empty
@@ -35,8 +36,11 @@ class Queue {
 public:
     Chunk* head;
     Chunk* tail;
+    uint32_t priceLevel;
 
-    Queue();
-    void push(Order order);
+    Queue(uint32_t pl);
+    Order* push(Order order);
     Order* pop();
+    Order* peek();
 };
+#endif
