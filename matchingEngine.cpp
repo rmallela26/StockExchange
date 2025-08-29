@@ -1,3 +1,4 @@
+#include <limits>
 #include <math.h>
 #include <vector>
 #include <iostream>
@@ -20,6 +21,9 @@ unsigned long long MatchingEngine::limit(bool side, uint32_t volume, uint32_t pr
         throw std::runtime_error("Max concurrent orders reached");
     }
 
+    // modify later to pushing just paramters
+    // to save time in creating object (since object
+    // only gets copied over)
     Order order{id, side, volume, price};
 
     std::vector<Queue>& currSide = side == BUY_SIDE ? buySide : sellSide;
@@ -70,14 +74,57 @@ unsigned long long MatchingEngine::limit(bool side, uint32_t volume, uint32_t pr
 
 }
 
-unsigned long long MatchingEngine::market(bool side, uint32_t volume, uint32_t price) {
+void MatchingEngine::market(bool side, uint32_t volume) {
 
+    std::vector<Queue>& currSide = side == BUY_SIDE ? buySide : sellSide;
+    std::vector<Queue>& otherSide = side == BUY_SIDE ? sellSide : buySide;
+
+    int ind = 0; 
+    int numLevels = otherSide.size();
+    while (ind < numLevels) {
+        while (Order* o = otherSide[ind].peek()) {
+            Order& ord = *o; 
+            uint32_t volumeTraded = std::min(volume, ord.volume);
+            if (volumeTraded == ord.volume) {
+                orders[ord.id] = nullptr;
+                ord.tombstone();
+                // broadcast
+                volume -= volumeTraded;
+                if (volume == 0) {
+                    id++;
+                    return;
+                }
+            } else {
+                ord.volume -= volumeTraded;
+                // broadcast
+                id++;
+                return;
+            }
+        }
+        ind++;
+    }
+    
+    id++;
 }
 
-void MatchingEngine::cancel(unsigned long long id) {
-
+// Takes the address of the order to cancel
+// Order address is found by some auxiliary thread and given to ME
+void MatchingEngine::cancel(Order* ord) {
+    orders[ord->id] = nullptr;
+    ord->tombstone();
 }
 
-void MatchingEngine::modify(unsigned long long id, uint32_t newVolume, uint32_t newPrice) {
-
+// returns the id of the new order 
+unsigned long long MatchingEngine::modify(Order* ord, uint32_t newVolume, uint32_t newPrice) {
+    // If only volume is different just change the volume 
+    // If price is different, tombstone it and call limit (be careful with id's)
+    if (newPrice == ord->price) {
+        ord->volume = newVolume;
+        return ord->id;
+    } else {
+        bool side = ord->side;
+        orders[ord->id] = nullptr;
+        (*ord).tombstone();
+        return limit(side, newVolume, newPrice); // given new id 
+    }
 }

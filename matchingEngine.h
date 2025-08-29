@@ -29,8 +29,8 @@ public:
     MatchingEngine();
 
     unsigned long long limit(bool side, uint32_t volume, uint32_t price);
-    unsigned long long market(bool side, uint32_t volume, uint32_t price);
-    void cancel(unsigned long long id);
-    void modify(unsigned long long id, uint32_t newVolume, uint32_t  newPrice);
+    void market(bool side, uint32_t volume);
+    void cancel(Order* ord);
+    unsigned long long modify(Order* ord, uint32_t newVolume, uint32_t  newPrice);
 };
 #endif
