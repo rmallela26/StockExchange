@@ -36,6 +36,7 @@ SlabAllocator::~SlabAllocator() {
 }
 
 SlabAllocator queueSlabAllocator(128 * 1000000ULL, sizeof(Chunk));  // 128 MB
+SlabAllocator orderMessageAllocator(1000000ULL, sizeof(OrderMessage)); // 1 MB
 
 
 
@@ -127,4 +128,35 @@ Order* Queue::peek() {
         } 
     }
     return &o[h];
+}
+
+MessageQueue::MessageQueue() { // constructor call
+    head.store(0);
+    tail.store(0);
+    for (int i = 0; i < MESSAGE_QUEUE_SIZE; i++) {
+        buffer[i].seq.store(i, std::memory_order_relaxed);
+    }
+}
+
+void MessageQueue::push(OrderMessage* m) {
+    size_t pos = tail.fetch_add(1, std::memory_order_relaxed); 
+    Slot& slot = buffer[pos % MESSAGE_QUEUE_SIZE];
+    
+    while(slot.seq.load(std::memory_order_acquire) != pos);
+
+    slot.message = m; 
+    slot.seq.store(pos + 1, std::memory_order_release);
+}
+
+OrderMessage* MessageQueue::pop() {
+    size_t pos = head.load(std::memory_order_relaxed);
+    Slot& slot = buffer[pos % MESSAGE_QUEUE_SIZE];
+
+    size_t expected = pos + 1;
+    if (slot.seq.load(std::memory_order_acquire) != expected) return nullptr; 
+
+    OrderMessage* ord = slot.message; 
+    slot.seq.store(pos + MESSAGE_QUEUE_SIZE, std::memory_order_release);
+    head.store(pos + 1, std::memory_order_relaxed);
+    return ord; 
 }

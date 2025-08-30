@@ -26,6 +26,8 @@ public:
     std::vector<Queue> buySide;
     std::vector<Queue> sellSide;
 
+    MessageQueue messageQueue;
+
     MatchingEngine();
 
     unsigned long long limit(bool side, uint32_t volume, uint32_t price);
