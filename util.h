@@ -57,7 +57,7 @@ struct OrderMessage {
     uint32_t price;
     uint32_t volume;
     bool side;
-    Order* ord;
+    unsigned long long orderId;
 };
 
 struct Slot {

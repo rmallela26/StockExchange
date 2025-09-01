@@ -57,6 +57,7 @@
         "utility": "cpp",
         "text_encoding": "cpp",
         "thread": "cpp",
-        "iostream": "cpp"
+        "iostream": "cpp",
+        "deque": "cpp"
     }
 }

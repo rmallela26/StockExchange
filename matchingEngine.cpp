@@ -109,22 +109,24 @@ void MatchingEngine::market(bool side, uint32_t volume) {
 
 // Takes the address of the order to cancel
 // Order address is found by some auxiliary thread and given to ME
-void MatchingEngine::cancel(Order* ord) {
-    orders[ord->id] = nullptr;
-    ord->tombstone();
+void MatchingEngine::cancel(unsigned long long orderId) {
+    Order& ord = *orders[orderId];
+    orders[ord.id] = nullptr;
+    ord.tombstone();
 }
 
 // returns the id of the new order 
-unsigned long long MatchingEngine::modify(Order* ord, uint32_t newVolume, uint32_t newPrice) {
+unsigned long long MatchingEngine::modify(unsigned long long orderId, uint32_t newVolume, uint32_t newPrice) {
     // If only volume is different just change the volume 
     // If price is different, tombstone it and call limit (be careful with id's)
-    if (newPrice == ord->price) {
-        ord->volume = newVolume;
-        return ord->id;
+    Order& ord = *orders[orderId];
+    if (newPrice == ord.price) {
+        ord.volume = newVolume;
+        return ord.id;
     } else {
-        bool side = ord->side;
-        orders[ord->id] = nullptr;
-        (*ord).tombstone();
+        bool side = ord.side;
+        orders[ord.id] = nullptr;
+        ord.tombstone();
         return limit(side, newVolume, newPrice); // given new id 
     }
 }
