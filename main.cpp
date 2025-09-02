@@ -23,6 +23,9 @@
 #include <netinet/in.h>  
 #include <arpa/inet.h> 
 
+#include <random>
+#include <chrono>
+
 constexpr int PORT = 9000;
 constexpr int BACKLOG = 10;
 constexpr size_t MSG_SIZE = 24;
@@ -215,6 +218,64 @@ void clientTest(uint8_t stockId, uint8_t type, bool side,
     close(fd);
 }
 
+
+void speedTestOrderBook(size_t numOrders) {
+    std::mt19937 rng(12345); // deterministic seed
+    std::uniform_int_distribution<int> symDist(0, 3);     // 4 symbols
+    std::uniform_int_distribution<int> typeDist(0, 3);    // LIMIT/MARKET/CANCEL/MODIFY
+    std::uniform_int_distribution<int> sideDist(0, 1);    // buy/sell
+    std::uniform_int_distribution<int> volDist(1, 1000);  // volumes
+    std::normal_distribution<double> priceDist(1000, 5);  // clustered around 1000
+    std::uniform_int_distribution<uint64_t> idDist(1, 1e9);
+
+    std::vector<uint64_t> liveOrders; // track live IDs for cancel/modify
+    liveOrders.reserve(numOrders);
+
+    double overhead = 0;
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    for (size_t i = 0; i < numOrders; i++) {
+        auto s = std::chrono::high_resolution_clock::now();
+        uint8_t stockId = symDist(rng);
+        uint8_t type    = typeDist(rng);
+        bool side       = sideDist(rng);
+        uint32_t vol    = volDist(rng);
+        uint32_t price  = std::max(1, (int)priceDist(rng));
+        uint64_t oid    = idDist(rng);
+
+        // Ensure cancel/modify only happen if there are live orders
+        if ((type == CANCEL || type == MODIFY) && liveOrders.empty()) {
+            type = LIMIT; // fallback
+        }
+
+        if (type == CANCEL || type == MODIFY) {
+            oid = liveOrders[rng() % liveOrders.size()];
+        } else if (type == LIMIT) {
+            liveOrders.push_back(oid);
+        }
+
+        // Build message
+        auto buf = buildMsg(stockId, type, side, vol, price, oid);
+        uint8_t stock;
+        OrderMessage* msg = parseOrder(buf.data(), &stock);
+
+        auto e = std::chrono::high_resolution_clock::now();
+        overhead += std::chrono::duration<double>(e - s).count();
+
+        // Push to engine queue
+        shards[stock]->messageQueue.push(msg);
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    double elapsed = std::chrono::duration<double>(end - start).count();
+    double engineOnly = elapsed - overhead;
+
+    double throughput = numOrders / engineOnly;
+    std::cout << "Processed " << numOrders << " orders in "
+              << engineOnly << " sec = " << throughput << " orders/sec\n";
+}
+
 int main() {
     // spawn all threads
     // matching engines first, then accept connections
@@ -227,23 +288,29 @@ int main() {
 
     std::thread acceptThread(acceptConnections);
 
-    // -------- TESTS --------
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    // // -------- TESTS --------
+    // std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-    // Fire some test clients
-    std::thread c1(clientTest, 0, LIMIT, 1, 100, 50, 1111);
-    std::thread c2(clientTest, 1, MARKET, 0, 200, 0, 2222);
-    std::thread c3(clientTest, 2, CANCEL, 1, 0, 0, 3333);
-    std::thread c4(clientTest, 3, MODIFY, 0, 150, 60, 4444);
+    // // Fire some test clients
+    // std::thread c1(clientTest, 0, LIMIT, 1, 100, 50, 1111);
+    // std::thread c2(clientTest, 1, MARKET, 0, 200, 0, 2222);
+    // std::thread c3(clientTest, 2, CANCEL, 1, 0, 0, 3333);
+    // std::thread c4(clientTest, 3, MODIFY, 0, 150, 60, 4444);
 
-    c1.join();
-    c2.join();
-    c3.join();
-    c4.join();
+    // c1.join();
+    // c2.join();
+    // c3.join();
+    // c4.join();
 
-    // let server process
-    std::this_thread::sleep_for(std::chrono::seconds(2));
-    // -----------------------
+    // printf("here\n");
+    // // let server process
+    // std::this_thread::sleep_for(std::chrono::seconds(2));
+    // // -----------------------
+    // printf("here\n");
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(200)); // warmup
+
+    speedTestOrderBook(500'000);
 
     acceptThread.join();
 }

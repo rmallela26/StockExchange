@@ -36,7 +36,7 @@ SlabAllocator::~SlabAllocator() {
 }
 
 SlabAllocator queueSlabAllocator(128 * 1000000ULL, sizeof(Chunk));  // 128 MB
-SlabAllocator orderMessageAllocator(1000000ULL, sizeof(OrderMessage)); // 1 MB
+SlabAllocator orderMessageAllocator(128 * 1000000ULL, sizeof(OrderMessage)); // 1 MB
 
 
 
